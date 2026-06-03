@@ -12,6 +12,6 @@
 release: "0.3"
 e2e_ref: release-0.3
 components:
-  hyperfleet-api: v0.3.0-rc1
-  hyperfleet-sentinel: v0.3.0-rc1
-  hyperfleet-adapter: v0.3.0-rc1
+  hyperfleet-api: v0.3.0
+  hyperfleet-sentinel: v0.3.0
+  hyperfleet-adapter: v0.3.0

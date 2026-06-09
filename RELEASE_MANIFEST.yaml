@@ -1,0 +1,17 @@
+# RC E2E coordination manifest.
+#
+# Lists the per-component image versions and the hyperfleet-e2e test-suite ref
+# that make up a release candidate. scripts/trigger-rc-e2e.sh reads this file,
+# verifies the images exist in Quay, and triggers the Prow RC E2E job via Gangway.
+#
+# This is NOT the build source of truth -- Konflux Snapshots are. It is the
+# human-maintained record of which combination of images is under test.
+#
+# Image tags in Quay have no "v" prefix (the Konflux pipeline strips it); the
+# trigger script strips the "v" from the values below to match.
+release: "0.3"
+e2e_ref: release-0.3
+components:
+  hyperfleet-api: v0.3.0
+  hyperfleet-sentinel: v0.3.0
+  hyperfleet-adapter: v0.3.0

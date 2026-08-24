@@ -51,10 +51,20 @@ adapter_tag="$(yq '.components.hyperfleet-adapter' "${MANIFEST}" | sed 's/^v//')
 e2e_ref="$(yq '.e2e_ref' "${MANIFEST}")"
 [ "${e2e_ref}" = "null" ] && e2e_ref=""
 
+# hyperfleet-applier is optional until the first released image exists. A missing
+# or null value must not fail Quay pre-flight or inject APPLIER_IMAGE_TAG, or
+# RC-E2E for api/sentinel/adapter would break.
+applier_raw="$(yq '.components.hyperfleet-applier' "${MANIFEST}")"
+case "${applier_raw}" in
+  null|""|"~") applier_tag="" ;;
+  *) applier_tag="$(printf '%s' "${applier_raw}" | sed 's/^v//')" ;;
+esac
+
 echo "Manifest: ${MANIFEST}"
 echo "  hyperfleet-api:      ${api_tag}"
 echo "  hyperfleet-sentinel: ${sentinel_tag}"
 echo "  hyperfleet-adapter:  ${adapter_tag}"
+echo "  hyperfleet-applier:  ${applier_tag:-<absent>}"
 echo "  e2e_ref:             ${e2e_ref:-<default: test binary built from pod image / main>}"
 echo "  namespace_prefix:    ${NAMESPACE_PREFIX}"
 echo
@@ -65,10 +75,13 @@ echo
 if command -v podman >/dev/null 2>&1; then
   echo "Verifying images in Quay (podman manifest inspect)..."
   missing=0
-  for pair in \
-    "hyperfleet-api:${api_tag}" \
-    "hyperfleet-sentinel:${sentinel_tag}" \
-    "hyperfleet-adapter:${adapter_tag}"; do
+  verify_pairs=(
+    "hyperfleet-api:${api_tag}"
+    "hyperfleet-sentinel:${sentinel_tag}"
+    "hyperfleet-adapter:${adapter_tag}"
+  )
+  [ -n "${applier_tag}" ] && verify_pairs+=("hyperfleet-applier:${applier_tag}")
+  for pair in "${verify_pairs[@]}"; do
     comp="${pair%%:*}"
     tag="${pair##*:}"
     if podman manifest inspect "${REGISTRY}/${comp}:${tag}" >/dev/null 2>&1; then
@@ -92,6 +105,7 @@ envs="$(jq -n \
   --arg api "${api_tag}" \
   --arg sentinel "${sentinel_tag}" \
   --arg adapter "${adapter_tag}" \
+  --arg applier "${applier_tag}" \
   --arg ns "${NAMESPACE_PREFIX}" \
   --arg e2e_ref "${e2e_ref}" \
   '{
@@ -100,7 +114,8 @@ envs="$(jq -n \
      MULTISTAGE_PARAM_OVERRIDE_ADAPTER_IMAGE_TAG: $adapter,
      MULTISTAGE_PARAM_OVERRIDE_NAMESPACE_PREFIX: $ns
    }
-   + (if $e2e_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_E2E_REF: $e2e_ref} else {} end)')"
+   + (if $e2e_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_E2E_REF: $e2e_ref} else {} end)
+   + (if $applier != "" then {MULTISTAGE_PARAM_OVERRIDE_APPLIER_IMAGE_TAG: $applier} else {} end)')"
 
 payload="$(jq -n --argjson envs "${envs}" '{job_execution_type: "1", pod_spec_options: {envs: $envs}}')"
 

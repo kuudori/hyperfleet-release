@@ -12,7 +12,7 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
 ```
 
 - [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) (repo root) records the per-component image versions and the `hyperfleet-e2e` branch (`e2e_ref`) that form a release candidate.
-- `trigger-rc-e2e.sh` reads the manifest, verifies the three images exist in Quay, and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags and `E2E_REF`.
+- `trigger-rc-e2e.sh` reads the manifest, verifies the listed images exist in Quay (api, sentinel, adapter; applier only when `components.hyperfleet-applier` is set), and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags and `E2E_REF`. A missing applier entry is skipped so existing RC-E2E runs keep working until the first applier image is released.
 
 ## Prerequisites
 
@@ -37,6 +37,7 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
      hyperfleet-api: v0.3.0-rc1
      hyperfleet-sentinel: v0.3.0-rc1
      hyperfleet-adapter: v0.3.0-rc1
+     # hyperfleet-applier: v0.1.0-rc1   # optional; omit until the image exists
    ```
 2. Export your token (above) and run:
    ```bash

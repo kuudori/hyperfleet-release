@@ -12,7 +12,7 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
 ```
 
 - [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) (repo root) records the per-component image versions and the `hyperfleet-e2e` branch (`e2e_ref`) that form a release candidate.
-- `trigger-rc-e2e.sh` reads the manifest, verifies the listed images exist in Quay (api, sentinel, adapter; applier only when `components.hyperfleet-applier` is set), and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags and `E2E_REF`. A missing applier entry is skipped so existing RC-E2E runs keep working until the first applier image is released.
+- `trigger-rc-e2e.sh` reads the manifest, verifies the listed images exist in Quay, and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags and `E2E_REF`. If the manifest includes `hyperfleet-applier`, the script verifies its image and passes `APPLIER_IMAGE_TAG` to Prow. If an older manifest omits it, the script preserves compatibility with three-component releases.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
      hyperfleet-api: v0.3.0-rc1
      hyperfleet-sentinel: v0.3.0-rc1
      hyperfleet-adapter: v0.3.0-rc1
-     # hyperfleet-applier: v0.1.0-rc1   # optional; omit until the image exists
+     hyperfleet-applier: v0.1.0-rc1 # include when applier is part of the release
    ```
 2. Export your token (above) and run:
    ```bash
@@ -51,7 +51,7 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
 
 ## What the job does
 
-- Pulls the three RC images from `quay.io/redhat-services-prod/hyperfleet-tenant/hyperfleet/*`.
+- Pulls the RC images listed in the manifest from `quay.io/redhat-services-prod/hyperfleet-tenant/hyperfleet/*`.
 - When `e2e_ref` is set, clones `hyperfleet-e2e` at that branch, builds the test binary, and deploys with that branch's scripts.
 - Deploys to the `hyperfleet-dev-prow` GKE cluster and runs `tier0 || tier1`.
 

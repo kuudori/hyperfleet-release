@@ -51,9 +51,10 @@ adapter_tag="$(yq '.components.hyperfleet-adapter' "${MANIFEST}" | sed 's/^v//')
 e2e_ref="$(yq '.e2e_ref' "${MANIFEST}")"
 [ "${e2e_ref}" = "null" ] && e2e_ref=""
 
-# hyperfleet-applier is optional until the first released image exists. A missing
-# or null value must not fail Quay pre-flight or inject APPLIER_IMAGE_TAG, or
-# RC-E2E for api/sentinel/adapter would break.
+# Historic release manifests contain only api, sentinel, and adapter. Preserve
+# compatibility with those manifests while including applier whenever it is set.
+# A missing or null value must not fail Quay pre-flight or inject
+# APPLIER_IMAGE_TAG.
 applier_raw="$(yq '.components.hyperfleet-applier' "${MANIFEST}")"
 case "${applier_raw}" in
   null|""|"~") applier_tag="" ;;

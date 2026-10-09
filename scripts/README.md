@@ -8,16 +8,17 @@ This directory holds the manual trigger for the **release-candidate end-to-end (
 
 ```
 RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──► Prow RC E2E job
-  (versions + e2e_ref)      (verify in Quay)                     (tier0 + tier1 on GKE)
+  (versions + refs)        (verify in Quay)                     (tier0 + tier1 on GKE)
 ```
 
-- [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) (repo root) records the per-component image versions and the `hyperfleet-e2e` branch (`e2e_ref`) that form a release candidate.
-- `trigger-rc-e2e.sh` reads the manifest, verifies the listed images exist in Quay, and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags and `E2E_REF`. If the manifest includes `hyperfleet-applier`, the script verifies its image and passes `APPLIER_IMAGE_TAG` to Prow. If an older manifest omits it, the script preserves compatibility with three-component releases.
+- [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) (repo root) records the per-component image versions, chart refs, the `hyperfleet-infra` ref (`infra_ref`), and the `hyperfleet-e2e` branch (`e2e_ref`) that form a release candidate.
+- `trigger-rc-e2e.sh` reads the manifest, verifies the listed images exist in Quay, and triggers the Prow job `periodic-ci-openshift-hyperfleet-hyperfleet-e2e-main-rc-e2e-rc-e2e` via Gangway, injecting the image tags, chart refs, `INFRA_REF` and `E2E_REF`. Chart refs and the infra ref are passed through the `MULTISTAGE_PARAM_OVERRIDE_*_CHART_REF` and `MULTISTAGE_PARAM_OVERRIDE_INFRA_REF` variables; if omitted, the Prow setup defaults them to `main`. If the manifest includes `hyperfleet-applier`, the script verifies its image and passes the Applier override to Prow. If an older manifest omits it, the script preserves compatibility with three-component releases.
 
 ## Prerequisites
 
 - **Required CLI:** `yq` (mikefarah), `jq`, `curl`.
 - **Optional CLI:** `podman` — used for the pre-flight "do the images exist in Quay?" check. If it isn't installed, the check is skipped and the job still triggers (it'll just fail later if an image is genuinely missing).
+- **Optional CLI:** `git` — used for the pre-flight "do the refs exist?" check (`git ls-remote`, no clone). Skipped if `git` isn't installed.
 - **app.ci access + token.** The job runs on OpenShift CI (`app.ci`), so you need a token from that cluster:
   1. Log into <https://console-openshift-console.apps.ci.l2s4.p1.openshiftapps.com/> (Red Hat SSO).
   2. Top-right (your name) → **Copy login command** → **Display Token**.
@@ -29,10 +30,15 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
 
 ## Run it
 
-1. Update [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) with the RC versions and `e2e_ref`:
+1. Update [`RELEASE_MANIFEST.yaml`](../RELEASE_MANIFEST.yaml) with the RC versions and refs:
    ```yaml
    release: "0.3"
    e2e_ref: release-0.3
+   infra_ref: release-0.3 # hyperfleet-infra branch or tag to deploy from
+   chart_refs:
+     hyperfleet-api: v0.3.0
+     hyperfleet-sentinel: v0.3.0
+     hyperfleet-adapter: v0.3.0
    components:
      hyperfleet-api: v0.3.0-rc1
      hyperfleet-sentinel: v0.3.0-rc1
@@ -47,12 +53,13 @@ RELEASE_MANIFEST.yaml ──► trigger-rc-e2e.sh ──► Gangway API ──�
 
 **Retrigger** (e.g. after a flake): just run the script again — it re-reads the manifest.
 
-**Dry run** (no token needed): `DRY_RUN=1 ./scripts/trigger-rc-e2e.sh` reads the manifest, verifies the images in Quay, and prints the exact Gangway payload **without triggering anything** — handy for sanity-checking the manifest before a real run.
+**Dry run** (no token needed): `DRY_RUN=1 ./scripts/trigger-rc-e2e.sh` reads the manifest, verifies the images in Quay and the git refs, and prints the exact Gangway payload **without triggering anything** — handy for sanity-checking the manifest before a real run.
 
 ## What the job does
 
 - Pulls the RC images listed in the manifest from `quay.io/redhat-services-prod/hyperfleet-tenant/hyperfleet/*`.
 - When `e2e_ref` is set, clones `hyperfleet-e2e` at that branch, builds the test binary, and deploys with that branch's scripts.
+- Clones `hyperfleet-infra` at `infra_ref` (default `main`) and deploys the API, Sentinel and Adapter charts at their `chart_refs` (default `main`).
 - Deploys to the `hyperfleet-dev-prow` GKE cluster and runs `tier0 || tier1`.
 
 ## Notes

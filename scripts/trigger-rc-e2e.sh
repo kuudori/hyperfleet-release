@@ -5,7 +5,7 @@
 # This is the manual trigger used until the tag-driven GitHub Action is wired up
 # (see scripts/README.md and HYPERFLEET-1038). It reads the manifest, optionally
 # verifies the images exist in Quay, then POSTs to Gangway with the per-component
-# image tags and the E2E_REF override.
+# image tags, the chart and infra refs, and the E2E_REF override.
 #
 # Requires an app.ci token in GANGWAY_TOKEN -- see scripts/README.md.
 #
@@ -48,6 +48,10 @@ fi
 api_tag="$(yq '.components.hyperfleet-api' "${MANIFEST}" | sed 's/^v//')"
 sentinel_tag="$(yq '.components.hyperfleet-sentinel' "${MANIFEST}" | sed 's/^v//')"
 adapter_tag="$(yq '.components.hyperfleet-adapter' "${MANIFEST}" | sed 's/^v//')"
+api_chart_ref="$(yq '.chart_refs.hyperfleet-api // ""' "${MANIFEST}")"
+sentinel_chart_ref="$(yq '.chart_refs.hyperfleet-sentinel // ""' "${MANIFEST}")"
+adapter_chart_ref="$(yq '.chart_refs.hyperfleet-adapter // ""' "${MANIFEST}")"
+infra_ref="$(yq '.infra_ref // ""' "${MANIFEST}")"
 e2e_ref="$(yq '.e2e_ref' "${MANIFEST}")"
 [ "${e2e_ref}" = "null" ] && e2e_ref=""
 
@@ -65,6 +69,10 @@ echo "Manifest: ${MANIFEST}"
 echo "  hyperfleet-api:      ${api_tag}"
 echo "  hyperfleet-sentinel: ${sentinel_tag}"
 echo "  hyperfleet-adapter:  ${adapter_tag}"
+echo "  api chart ref:       ${api_chart_ref:-<default: main>}"
+echo "  sentinel chart ref:  ${sentinel_chart_ref:-<default: main>}"
+echo "  adapter chart ref:   ${adapter_chart_ref:-<default: main>}"
+echo "  infra_ref:           ${infra_ref:-<default: main>}"
 echo "  hyperfleet-applier:  ${applier_tag:-<absent>}"
 echo "  e2e_ref:             ${e2e_ref:-<default: test binary built from pod image / main>}"
 echo "  namespace_prefix:    ${NAMESPACE_PREFIX}"
@@ -101,11 +109,44 @@ else
 fi
 echo
 
-# Build the Gangway payload. E2E_REF is only sent when set.
+# Optional pre-flight: confirm the git refs exist. Prow clones them with
+# --branch, so a missing branch or tag fails only after the cluster setup.
+ref_pairs=()
+[ -n "${infra_ref}" ] && ref_pairs+=("hyperfleet-infra:${infra_ref}")
+[ -n "${api_chart_ref}" ] && ref_pairs+=("hyperfleet-api:${api_chart_ref}")
+[ -n "${sentinel_chart_ref}" ] && ref_pairs+=("hyperfleet-sentinel:${sentinel_chart_ref}")
+[ -n "${adapter_chart_ref}" ] && ref_pairs+=("hyperfleet-adapter:${adapter_chart_ref}")
+[ -n "${e2e_ref}" ] && ref_pairs+=("hyperfleet-e2e:${e2e_ref}")
+if [ "${#ref_pairs[@]}" -gt 0 ] && command -v git >/dev/null 2>&1; then
+  echo "Verifying git refs (git ls-remote)..."
+  missing=0
+  for pair in "${ref_pairs[@]}"; do
+    repo="${pair%%:*}"
+    ref="${pair#*:}"
+    if git ls-remote --exit-code "https://github.com/openshift-hyperfleet/${repo}.git" \
+        "refs/heads/${ref}" "refs/tags/${ref}" >/dev/null 2>&1; then
+      echo "  OK   ${repo}@${ref}"
+    else
+      echo "  MISS ${repo}@${ref}  (no such branch or tag)"
+      missing=1
+    fi
+  done
+  if [ "${missing}" -ne 0 ]; then
+    echo "ERROR: one or more git refs are missing -- aborting." >&2
+    exit 1
+  fi
+  echo
+fi
+
+# Build the Gangway payload. Refs and the applier tag are only sent when set.
 envs="$(jq -n \
   --arg api "${api_tag}" \
   --arg sentinel "${sentinel_tag}" \
   --arg adapter "${adapter_tag}" \
+  --arg api_chart_ref "${api_chart_ref}" \
+  --arg sentinel_chart_ref "${sentinel_chart_ref}" \
+  --arg adapter_chart_ref "${adapter_chart_ref}" \
+  --arg infra_ref "${infra_ref}" \
   --arg applier "${applier_tag}" \
   --arg ns "${NAMESPACE_PREFIX}" \
   --arg e2e_ref "${e2e_ref}" \
@@ -116,6 +157,10 @@ envs="$(jq -n \
      MULTISTAGE_PARAM_OVERRIDE_NAMESPACE_PREFIX: $ns
    }
    + (if $e2e_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_E2E_REF: $e2e_ref} else {} end)
+   + (if $api_chart_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_API_CHART_REF: $api_chart_ref} else {} end)
+   + (if $sentinel_chart_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_SENTINEL_CHART_REF: $sentinel_chart_ref} else {} end)
+   + (if $adapter_chart_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_ADAPTER_CHART_REF: $adapter_chart_ref} else {} end)
+   + (if $infra_ref != "" then {MULTISTAGE_PARAM_OVERRIDE_INFRA_REF: $infra_ref} else {} end)
    + (if $applier != "" then {MULTISTAGE_PARAM_OVERRIDE_APPLIER_IMAGE_TAG: $applier} else {} end)')"
 
 payload="$(jq -n --argjson envs "${envs}" '{job_execution_type: "1", pod_spec_options: {envs: $envs}}')"

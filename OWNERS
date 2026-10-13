@@ -1,0 +1,8 @@
+approvers:
+- release-owners
+- tech-leads
+reviewers:
+- release-reviewers
+- release-owners
+labels:
+- area/release

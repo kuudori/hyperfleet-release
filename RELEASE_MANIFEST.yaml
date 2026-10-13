@@ -10,15 +10,20 @@
 #
 # Image tags in Quay have no "v" prefix (the Konflux pipeline strips it); the
 # trigger script strips the "v" from the values below to match.
+# Tags are immutable, so the refs below point at release-X.Y.Z tags, not the
+# mutable release-X.Y branches.
 release: "0.3"
-e2e_ref: release-0.3
-infra_ref: release-0.3
+e2e_ref: release-0.3.1
+infra_ref: release-0.3.1
 chart_refs:
-  hyperfleet-api: v0.3.0
-  hyperfleet-sentinel: v0.3.0
-  hyperfleet-adapter: v0.3.0
+  hyperfleet-api: v0.3.1
+  hyperfleet-sentinel: v0.3.1
+  hyperfleet-adapter: v0.3.1
 components:
-  hyperfleet-api: v0.3.0
-  hyperfleet-sentinel: v0.3.0
-  hyperfleet-adapter: v0.3.0
+  hyperfleet-api: v0.3.1
+  hyperfleet-sentinel: v0.3.1
+  hyperfleet-adapter: v0.3.1
+  # Carried over unchanged: the applier has no 0.3.x tag, so v0.1.0-rc1 stays
+  # the pinned ref. This flow does not deploy it; the trigger script sends
+  # overrides only for components listed here.
   hyperfleet-applier: v0.1.0-rc1
